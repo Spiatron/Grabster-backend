@@ -1,19 +1,26 @@
-import instaloader
+import requests
 
 def download_instagram(url: str):
-    L = instaloader.Instaloader(download_videos=False, download_comments=False, save_metadata=False)
-
     try:
-        shortcode = url.rstrip("/").split("/")[-1]  # get the post/reel shortcode
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        # Ensure URL ends with slash
+        url = url.rstrip("/") + "/?__a=1&__d=dis"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
         
-        # Only public content
-        if not post.is_video and not post.video_url:
+        data = response.json()
+        
+        # Navigate JSON to get video info
+        media = data.get("graphql", {}).get("shortcode_media", {})
+        
+        if not media.get("is_video", False):
             return {"status": "error", "message": "This post has no video."}
         
-        video_url = post.video_url
-        title = post.owner_username
-        thumbnail = post.url
+        video_url = media.get("video_url")
+        title = media.get("owner", {}).get("username", "Instagram Video")
+        thumbnail = media.get("display_url")
         
         return {
             "status": "ok",
@@ -22,6 +29,10 @@ def download_instagram(url: str):
             "thumbnail": thumbnail
         }
         
+    except requests.HTTPError as e:
+        return {"status": "error", "message": f"HTTP Error: {str(e)}"}
+    except requests.RequestException as e:
+        return {"status": "error", "message": f"Request Error: {str(e)}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
