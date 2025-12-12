@@ -1,37 +1,50 @@
-import requests
+import os
+import tempfile
+from yt_dlp import YoutubeDL
+from dotenv import load_dotenv
+
+# Read cookies content from environment variable (optional)
+COOKIES_CONTENT = os.environ.get("INSTAGRAM_COOKIES")
 
 def download_instagram(url: str):
+    """
+    Download Instagram video info using yt-dlp.
+    Works with public posts without cookies.
+    If COOKIES_CONTENT is set, it will use cookies for private posts.
+    """
+    ydl_opts = {
+        "format": "best",
+        "quiet": True,
+        "noplaylist": True,
+        "skip_download": True,  # only get URL
+    }
+
+    temp_cookie_file = None
+
+    # If cookies are provided, create a temporary file
+    if COOKIES_CONTENT:
+        temp_cookie_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_cookie_file.write(COOKIES_CONTENT.encode())
+        temp_cookie_file.flush()
+        ydl_opts["cookiefile"] = temp_cookie_file.name
+
     try:
-        # Remove any query params like ?igsh=...
-        shortcode = url.rstrip("/").split("/")[-1]
-        json_url = f"https://www.instagram.com/reel/{shortcode}/?__a=1&__d=dis"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-        response = requests.get(json_url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        data = response.json()
-        media = data.get("graphql", {}).get("shortcode_media", {})
-        
-        if not media.get("is_video", False):
-            return {"status": "error", "message": "This post has no video."}
-        
-        video_url = media.get("video_url")
-        title = media.get("owner", {}).get("username", "Instagram Video")
-        thumbnail = media.get("display_url")
-        
-        return {
-            "status": "ok",
-            "title": title,
-            "download_url": video_url,
-            "thumbnail": thumbnail
-        }
-        
-    except requests.HTTPError as e:
-        return {"status": "error", "message": f"HTTP Error: {str(e)}"}
-    except requests.RequestException as e:
-        return {"status": "error", "message": f"Request Error: {str(e)}"}
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            video_url = info.get("url")
+            title = info.get("title", "Instagram Video")
+            thumbnail = info.get("thumbnail")
+            return {
+                "status": "ok",
+                "title": title,
+                "download_url": video_url,
+                "thumbnail": thumbnail
+            }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    finally:
+        # Clean up temp cookie file if created
+        if temp_cookie_file:
+            temp_cookie_file.close()
+            os.unlink(temp_cookie_file.name)
+
