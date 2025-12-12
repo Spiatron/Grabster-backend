@@ -1,28 +1,30 @@
 import instaloader
 
-def download_instagram(url: str, username=None, password=None):
-    L = instaloader.Instaloader(download_videos=True, download_comments=False)
-    
-    # Optional: login for private/reels content
-    if username and password:
-        L.login(username, password)
+def download_instagram(url: str):
+    L = instaloader.Instaloader(download_videos=False, download_comments=False, save_metadata=False)
 
     try:
-        post = instaloader.Post.from_shortcode(L.context, url.split("/")[-2])
+        shortcode = url.rstrip("/").split("/")[-1]  # get the post/reel shortcode
+        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        
+        # Only public content
+        if not post.is_video and not post.video_url:
+            return {"status": "error", "message": "This post has no video."}
+        
         video_url = post.video_url
         title = post.owner_username
         thumbnail = post.url
+        
         return {
             "status": "ok",
             "title": title,
             "download_url": video_url,
             "thumbnail": thumbnail
         }
+        
     except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
+
 
 # Example usage
 url = "https://www.instagram.com/reel/XXXXXXXXX/"
